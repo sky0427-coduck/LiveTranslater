@@ -1,0 +1,10 @@
+{
+  "deepl": {
+    "apiKey": "",
+    "apiUrl": "https://api-free.deepl.com/v2/translate"
+  },
+  "openai": {
+    "apiKey": "",
+    "model": "gpt-4o-mini"
+  }
+}

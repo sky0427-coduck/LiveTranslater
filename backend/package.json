@@ -1,0 +1,27 @@
+{
+  "name": "ourhouse-backend",
+  "version": "1.0.0",
+  "description": "Ourhouse Translator backend — WebSocket hub + STT/Translation services",
+  "main": "dist/backend/src/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/backend/src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "node-fetch": "^3.3.2",
+    "form-data": "^4.0.0",
+    "uuid": "^9.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/ws": "^8.5.10",
+    "@types/uuid": "^9.0.7",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0"
+  }
+}
