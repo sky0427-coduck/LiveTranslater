@@ -12,6 +12,7 @@ export interface AudioDevice {
 
 export interface UseAudioCaptureOptions {
   onAudioChunk: (samples: Float32Array, sampleRate: number) => void;
+  onStreamStarted?: (stream: MediaStream) => Promise<void> | void;
 }
 
 function scoreDevice(label: string, deviceId: string): number {
@@ -44,7 +45,7 @@ function scoreDevice(label: string, deviceId: string): number {
   return score;
 }
 
-export function useAudioCapture({ onAudioChunk }: UseAudioCaptureOptions) {
+export function useAudioCapture({ onAudioChunk, onStreamStarted }: UseAudioCaptureOptions) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('default');
@@ -54,6 +55,7 @@ export function useAudioCapture({ onAudioChunk }: UseAudioCaptureOptions) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const mutedGainRef = useRef<GainNode | null>(null);
   const accum = useRef<Float32Array[]>([]);
   const sendTimer = useRef<number | null>(null);
 
@@ -115,13 +117,18 @@ export function useAudioCapture({ onAudioChunk }: UseAudioCaptureOptions) {
       });
       streamRef.current = stream;
 
+      await onStreamStarted?.(stream);
+
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
       const sampleRate = audioCtx.sampleRate;
 
       const source = audioCtx.createMediaStreamSource(stream);
       const processor = audioCtx.createScriptProcessor(BUFFER_SIZE, 1, 1);
+      const mutedGain = audioCtx.createGain();
+      mutedGain.gain.value = 0;
       processorRef.current = processor;
+      mutedGainRef.current = mutedGain;
 
       processor.onaudioprocess = (event) => {
         const input = event.inputBuffer.getChannelData(0);
@@ -135,7 +142,10 @@ export function useAudioCapture({ onAudioChunk }: UseAudioCaptureOptions) {
       };
 
       source.connect(processor);
-      processor.connect(audioCtx.destination);
+      // ScriptProcessor must be connected to run, but monitoring microphone
+      // audio through the speakers can create a feedback loop.
+      processor.connect(mutedGain);
+      mutedGain.connect(audioCtx.destination);
 
       sendTimer.current = window.setInterval(() => {
         if (accum.current.length === 0) return;
@@ -161,7 +171,7 @@ export function useAudioCapture({ onAudioChunk }: UseAudioCaptureOptions) {
       console.error('[audio] capture failed:', err);
       alert(`마이크 접근에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [isCapturing, selectedDeviceId, onAudioChunk]);
+  }, [isCapturing, selectedDeviceId, onAudioChunk, onStreamStarted]);
 
   const stopCapture = useCallback(() => {
     if (sendTimer.current) {
@@ -171,6 +181,8 @@ export function useAudioCapture({ onAudioChunk }: UseAudioCaptureOptions) {
 
     processorRef.current?.disconnect();
     processorRef.current = null;
+    mutedGainRef.current?.disconnect();
+    mutedGainRef.current = null;
     audioCtxRef.current?.close();
     audioCtxRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());

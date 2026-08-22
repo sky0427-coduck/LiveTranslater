@@ -59,6 +59,8 @@ export type ClientMessage =
   | { type: 'TIMER_RESET'; payload: { seconds: number } }
   | { type: 'SWITCH_ENGINE'; payload: { engine: TranslationEngine } }
   | { type: 'SET_LANGUAGE'; payload: { sourceLang: string; targetLang: string } }
+  | { type: 'REALTIME_TRANSCRIPT'; payload: { text: string } }
+  | { type: 'REALTIME_TRANSLATION'; payload: { original: string; translated: string } }
   | { type: 'RESET_SESSION' };
 
 export interface TranscriptPayload {

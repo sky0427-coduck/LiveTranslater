@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAudioCapture } from '../hooks/useAudioCapture';
+import { useRealtimeTranslation } from '../hooks/useRealtimeTranslation';
 import { useSessionStore } from '../store/sessionStore';
 import { useTheme } from '../theme';
 
@@ -42,14 +43,37 @@ export function OperatorPage() {
 
   const handleAudioChunk = useCallback(
     (samples: Float32Array) => {
+      if (session?.translationEngine !== 'deepl') return;
       const safeBuffer = new ArrayBuffer(samples.byteLength);
       new Float32Array(safeBuffer).set(samples);
       sendBinary(safeBuffer);
     },
-    [sendBinary]
+    [sendBinary, session?.translationEngine]
   );
 
-  const audio = useAudioCapture({ onAudioChunk: handleAudioChunk });
+  const realtime = useRealtimeTranslation({
+    targetLanguage: session?.targetLang ?? 'ko',
+    onSourceTranscript: useCallback(
+      (text: string) => sendMessage({ type: 'REALTIME_TRANSCRIPT', payload: { text } }),
+      [sendMessage]
+    ),
+    onTranslation: useCallback(
+      (original: string, translated: string) => sendMessage({
+        type: 'REALTIME_TRANSLATION',
+        payload: { original, translated },
+      }),
+      [sendMessage]
+    ),
+  });
+
+  const handleStreamStarted = useCallback(async (stream: MediaStream) => {
+    if (session?.translationEngine === 'openai-realtime') await realtime.connect(stream);
+  }, [realtime, session?.translationEngine]);
+
+  const audio = useAudioCapture({
+    onAudioChunk: handleAudioChunk,
+    onStreamStarted: handleStreamStarted,
+  });
 
   useEffect(() => {
     if (!session) return;
@@ -92,8 +116,12 @@ export function OperatorPage() {
                 서버 {isConnected ? '연결됨' : '대기 중'}
               </span>
               <span className="status-pill">
-                <span className={`dot ${whisperReady ? 'live' : 'warn'}`} />
-                Whisper {whisperReady ? '준비됨' : '준비 중'}
+                <span className={`dot ${session.translationEngine === 'openai-realtime'
+                  ? (realtime.isConnected ? 'live' : 'warn')
+                  : (whisperReady ? 'live' : 'warn')}`} />
+                {session.translationEngine === 'openai-realtime'
+                  ? `Realtime ${realtime.isConnected ? '연결됨' : '대기 중'}`
+                  : `Whisper ${whisperReady ? '준비됨' : '준비 중'}`}
               </span>
             </div>
             <ThemeSwitch />
@@ -192,7 +220,7 @@ export function OperatorPage() {
 
             <div className="button-row">
               {audio.isCapturing ? (
-                <button className="btn btn-danger" onClick={audio.stopCapture} type="button">
+                <button className="btn btn-danger" onClick={() => { realtime.stop(); audio.stopCapture(); }} type="button">
                   캡처 중지
                 </button>
               ) : (
@@ -307,9 +335,45 @@ export function OperatorPage() {
                   onClick={() => sendMessage({ type: 'SWITCH_ENGINE', payload: { engine } })}
                   type="button"
                 >
-                  {engine === 'deepl' ? 'DeepL' : 'OpenAI'}
+                  {engine === 'deepl' ? 'DeepL (Whisper 필요)' : 'OpenAI Realtime'}
                 </button>
               ))}
+            </div>
+          </section>
+
+          <section className="panel section">
+            <div className="section-header">
+              <h2>번역 언어</h2>
+            </div>
+            <div className="field">
+              <label htmlFor="source-language">원문 언어</label>
+              <select
+                id="source-language"
+                className="select"
+                value={session.sourceLang}
+                onChange={(event) => sendMessage({
+                  type: 'SET_LANGUAGE',
+                  payload: { sourceLang: event.target.value, targetLang: session.targetLang },
+                })}
+              >
+                <option value="en">English</option>
+                <option value="auto">자동 감지</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="target-language">표시 언어</label>
+              <select
+                id="target-language"
+                className="select"
+                value={session.targetLang}
+                onChange={(event) => sendMessage({
+                  type: 'SET_LANGUAGE',
+                  payload: { sourceLang: session.sourceLang, targetLang: event.target.value },
+                })}
+              >
+                <option value="ko">한국어</option>
+                <option value="en">English</option>
+              </select>
             </div>
           </section>
 

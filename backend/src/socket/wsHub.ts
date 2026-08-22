@@ -51,9 +51,10 @@ function createDefaultSession(): SessionState {
     currentTeamId: null,
     timer: createTimer(DEFAULT_TIMER_SECONDS),
     sttEngine: 'whisper-local',
-    translationEngine: 'deepl',
-    sourceLang: 'auto',
-    targetLang: 'en',
+    // This app is for an English debate with a Korean audience.
+    translationEngine: 'openai-realtime',
+    sourceLang: 'en',
+    targetLang: 'ko',
     translations: [],
     status: 'idle',
   };
@@ -172,6 +173,12 @@ export class WsHub {
         console.log(`[wsHub] 번역: "${translated}"`);
       } catch (translErr) {
         console.error('[wsHub] 번역 오류:', translErr);
+        this.broadcast({
+          type: 'ERROR',
+          payload: {
+            message: `번역에 실패했습니다: ${translErr instanceof Error ? translErr.message : String(translErr)}`,
+          },
+        });
       }
 
       const resultId = uuidv4();
@@ -261,6 +268,34 @@ export class WsHub {
         this.session.sourceLang = msg.payload.sourceLang;
         this.session.targetLang = msg.payload.targetLang;
         this.broadcast({ type: 'SESSION_UPDATE', payload: this.session });
+        break;
+      case 'REALTIME_TRANSCRIPT':
+        this.broadcast({
+          type: 'PARTIAL_TRANSCRIPT',
+          payload: {
+            text: msg.payload.text,
+            isFinal: false,
+            teamId: this.session.currentTeamId ?? undefined,
+            timestamp: Date.now(),
+          },
+        });
+        break;
+      case 'REALTIME_TRANSLATION':
+        {
+          const id = uuidv4();
+          const translation = {
+            id,
+            original: msg.payload.original,
+            translated: msg.payload.translated,
+            sourceLang: this.session.sourceLang,
+            targetLang: this.session.targetLang,
+            teamId: this.session.currentTeamId ?? undefined,
+            timestamp: Date.now(),
+          };
+          this.session.translations.push(translation);
+          if (this.session.translations.length > 50) this.session.translations.shift();
+          this.broadcast({ type: 'TRANSLATION_RESULT', payload: translation });
+        }
         break;
       case 'RESET_SESSION':
         this.pauseTimer(false);

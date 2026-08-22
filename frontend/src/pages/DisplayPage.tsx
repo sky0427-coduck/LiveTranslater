@@ -51,7 +51,7 @@ export function DisplayPage() {
       </section>
 
       <footer className="display-footer">
-        <span>{session.translationEngine === 'deepl' ? 'DeepL' : 'OpenAI'} 번역</span>
+        <span>{session.translationEngine === 'deepl' ? 'DeepL' : 'OpenAI Realtime'} 번역</span>
         <button className="btn btn-ghost" onClick={toggleTheme} type="button">
           {theme === 'dark' ? 'Light' : 'Dark'} mode
         </button>

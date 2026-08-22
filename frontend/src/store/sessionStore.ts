@@ -32,9 +32,9 @@ const defaultSession: SessionState = {
   currentTeamId: null,
   timer: { totalSeconds: 300, remainingSeconds: 300, isRunning: false },
   sttEngine: 'whisper-local',
-  translationEngine: 'deepl',
-  sourceLang: 'auto',
-  targetLang: 'en',
+  translationEngine: 'openai-realtime',
+  sourceLang: 'en',
+  targetLang: 'ko',
   translations: [],
   status: 'idle',
 };
