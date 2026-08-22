@@ -1,5 +1,7 @@
 # Ourhouse Translator
 
+> README.md was Written by codex (문법 맞겠지)
+
 영어 토론회의 음성을 한국어 자막으로 보여 주는 실시간 통역 PWA입니다.
 
 기본 엔진은 **OpenAI Realtime Translation** (`gpt-realtime-translate`)입니다.
