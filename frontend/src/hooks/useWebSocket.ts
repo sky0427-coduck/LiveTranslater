@@ -17,11 +17,14 @@ export function useWebSocket(role: ClientRole) {
     ws.current = socket;
 
     socket.onopen = () => {
+      if (ws.current !== socket) return;
       console.log('[ws] connected');
       setConnected(true);
     };
 
     socket.onmessage = (event) => {
+      // Ignore events from a socket superseded by a reconnect or remount.
+      if (ws.current !== socket) return;
       try {
         const msg: ServerMessage = JSON.parse(event.data);
         applyServerMessage(msg);
@@ -31,6 +34,10 @@ export function useWebSocket(role: ClientRole) {
     };
 
     socket.onclose = () => {
+      // In React StrictMode, an effect can be cleaned up and mounted again
+      // before the old socket's close event fires. That old socket must not
+      // schedule another connection or replace the current one.
+      if (ws.current !== socket) return;
       console.log(`[ws] disconnected${shouldReconnect.current ? '. reconnecting...' : ''}`);
       setConnected(false);
       if (shouldReconnect.current) {
@@ -39,6 +46,7 @@ export function useWebSocket(role: ClientRole) {
     };
 
     socket.onerror = (err) => {
+      if (ws.current !== socket) return;
       console.error('[ws] error:', err);
     };
   }, [role, applyServerMessage, setConnected]);
@@ -64,7 +72,10 @@ export function useWebSocket(role: ClientRole) {
     return () => {
       shouldReconnect.current = false;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      ws.current?.close();
+      reconnectTimer.current = null;
+      const socket = ws.current;
+      ws.current = null;
+      socket?.close();
     };
   }, [connect]);
 

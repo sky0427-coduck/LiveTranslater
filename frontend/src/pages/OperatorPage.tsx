@@ -4,6 +4,7 @@ import { useAudioCapture } from '../hooks/useAudioCapture';
 import { useRealtimeTranslation } from '../hooks/useRealtimeTranslation';
 import { useSessionStore } from '../store/sessionStore';
 import { useTheme } from '../theme';
+import { useNavigate } from 'react-router-dom';
 
 function formatTime(totalSeconds: number) {
   const safeSeconds = Math.max(0, totalSeconds);
@@ -19,6 +20,8 @@ function minutesToSeconds(value: string) {
   if (!Number.isFinite(minutes)) return 300;
   return Math.max(1, Math.round(minutes * 60));
 }
+
+
 
 function ThemeSwitch() {
   const { theme, setTheme } = useTheme();
@@ -38,7 +41,6 @@ function ThemeSwitch() {
 export function OperatorPage() {
   const { sendMessage, sendBinary } = useWebSocket('operator');
   const { session, isConnected, whisperReady, currentTranscript } = useSessionStore();
-  const [timerMinutes, setTimerMinutes] = useState('5');
   const [speakerPickerOpen, setSpeakerPickerOpen] = useState(false);
 
   const handleAudioChunk = useCallback(
@@ -58,9 +60,9 @@ export function OperatorPage() {
       [sendMessage]
     ),
     onTranslation: useCallback(
-      (original: string, translated: string) => sendMessage({
+      (original: string, delta: string) => sendMessage({
         type: 'REALTIME_TRANSLATION',
-        payload: { original, translated },
+        payload: { original, delta },
       }),
       [sendMessage]
     ),
@@ -68,22 +70,12 @@ export function OperatorPage() {
 
   const handleStreamStarted = useCallback(async (stream: MediaStream) => {
     if (session?.translationEngine === 'openai-realtime') await realtime.connect(stream);
-  }, [realtime, session?.translationEngine]);
+  }, [realtime.connect, session?.translationEngine]);
 
   const audio = useAudioCapture({
     onAudioChunk: handleAudioChunk,
     onStreamStarted: handleStreamStarted,
   });
-
-  useEffect(() => {
-    if (!session) return;
-    setTimerMinutes(String(Math.round((session.timer.totalSeconds / 60) * 10) / 10));
-  }, [session?.currentTeamId, session?.timer.totalSeconds]);
-
-  const currentTeam = useMemo(
-    () => session?.teams.find((team) => team.id === session.currentTeamId),
-    [session]
-  );
 
   if (!session) {
     return (
@@ -117,10 +109,16 @@ export function OperatorPage() {
               </span>
               <span className="status-pill">
                 <span className={`dot ${session.translationEngine === 'openai-realtime'
-                  ? (realtime.isConnected ? 'live' : 'warn')
+                  ? (realtime.connectionStatus === 'connected' ? 'live' : 'warn')
                   : (whisperReady ? 'live' : 'warn')}`} />
                 {session.translationEngine === 'openai-realtime'
-                  ? `Realtime ${realtime.isConnected ? '연결됨' : '대기 중'}`
+                  ? `Realtime ${{
+                    idle: '대기 중',
+                    connecting: '연결 중',
+                    connected: '연결됨',
+                    reconnecting: '재연결 중',
+                    failed: '연결 실패',
+                  }[realtime.connectionStatus]}`
                   : `Whisper ${whisperReady ? '준비됨' : '준비 중'}`}
               </span>
             </div>
@@ -128,67 +126,13 @@ export function OperatorPage() {
           </div>
         </header>
 
+        {realtime.error && session.translationEngine === 'openai-realtime' && (
+          <div className="panel section" role="status">
+            Realtime 상태: {realtime.error}
+          </div>
+        )}
+
         <div className="main-stack">
-          <section className="panel section">
-            <div className="section-header">
-              <h2>세션 주제</h2>
-              <span className="hint">디스플레이 화면에 표시됩니다</span>
-            </div>
-            <div className="field">
-              <label htmlFor="topic">Topic</label>
-              <input
-                id="topic"
-                className="input"
-                type="text"
-                defaultValue={session.topic}
-                onBlur={(event) => sendMessage({ type: 'SET_TOPIC', payload: { topic: event.target.value } })}
-                placeholder="예: 결승 토론 주제"
-              />
-            </div>
-          </section>
-
-          <section className="panel section">
-            <div className="section-header">
-              <h2>발언 팀</h2>
-              <span className="hint">{currentTeam ? `현재 발언: ${currentTeam.name}` : '발언팀 없음'}</span>
-            </div>
-
-            <div className="button-row">
-              <button className="btn btn-primary" onClick={() => setSpeakerPickerOpen((v) => !v)} type="button">
-                발언 팀 변경
-              </button>
-              {session.currentTeamId && (
-                <button className="btn" onClick={() => sendMessage({ type: 'SET_TEAM', payload: { teamId: null } })} type="button">
-                  발언팀 해제
-                </button>
-              )}
-            </div>
-
-            {speakerPickerOpen && (
-              <div className="team-picker">
-                {session.teams.length === 0 ? (
-                  <span className="empty">먼저 팀을 추가하세요.</span>
-                ) : (
-                  session.teams.map((team) => (
-                    <button
-                      key={team.id}
-                      className={`team-row ${session.currentTeamId === team.id ? 'active' : ''}`}
-                      onClick={() => {
-                        sendMessage({ type: 'SET_TEAM', payload: { teamId: team.id } });
-                        setSpeakerPickerOpen(false);
-                      }}
-                      type="button"
-                    >
-                      <span className="team-dot" style={{ background: team.color || 'var(--accent)' }} />
-                      <span>{team.name}</span>
-                      <strong>{formatTime(team.timer.remainingSeconds)}</strong>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </section>
-
           <section className="panel section">
             <div className="section-header">
               <h2>오디오 입력</h2>
@@ -224,13 +168,22 @@ export function OperatorPage() {
                   캡처 중지
                 </button>
               ) : (
-                <button className="btn btn-primary" onClick={audio.startCapture} type="button">
-                  캡처 시작
+                <button
+                  className="btn btn-primary"
+                  disabled={audio.isStarting}
+                  onClick={() => {
+                    audio.startCapture();
+                    window.open('/display', '_blank');
+                  }}
+                  type="button"
+                >
+                  {audio.isStarting ? '연결 중…' : '캡처 시작 및 송출시작'}
                 </button>
               )}
               <button className="btn" onClick={audio.refreshDevices} type="button">
                 입력 새로고침
               </button>
+
             </div>
           </section>
 
@@ -246,83 +199,6 @@ export function OperatorPage() {
         </div>
 
         <aside className="side-stack">
-          <section className="panel section timer-card">
-            <div className="section-header">
-              <h2>타이머</h2>
-              <span className="hint">{session.timer.isRunning ? '진행 중' : '정지'}</span>
-            </div>
-            <div className="timer-value">{formatTime(session.timer.remainingSeconds)}</div>
-            <div className="field compact-field">
-              <label htmlFor="timer-minutes">타이머 길이(분)</label>
-              <input
-                id="timer-minutes"
-                className="input"
-                min="0.1"
-                step="0.5"
-                type="number"
-                value={timerMinutes}
-                onChange={(event) => setTimerMinutes(event.target.value)}
-              />
-            </div>
-            <div className="button-row">
-              <button className="btn btn-success" onClick={() => sendMessage({ type: 'TIMER_START' })} type="button">
-                시작
-              </button>
-              <button className="btn" onClick={() => sendMessage({ type: 'TIMER_PAUSE' })} type="button">
-                일시정지
-              </button>
-              <button
-                className="btn btn-ghost"
-                onClick={() => sendMessage({ type: 'TIMER_RESET', payload: { seconds: minutesToSeconds(timerMinutes) } })}
-                type="button"
-              >
-                시간 적용
-              </button>
-            </div>
-          </section>
-
-          <section className="panel section">
-            <div className="section-header">
-              <h2>팀 목록</h2>
-              <button
-                className="btn btn-ghost"
-                onClick={() => {
-                  const name = window.prompt('추가할 팀 이름을 입력하세요.');
-                  if (name?.trim()) {
-                    sendMessage({
-                      type: 'ADD_TEAM',
-                      payload: { name: name.trim(), seconds: minutesToSeconds(timerMinutes) },
-                    });
-                  }
-                }}
-                type="button"
-              >
-                + 팀 추가
-              </button>
-            </div>
-            <div className="team-list">
-              {session.teams.length === 0 ? (
-                <span className="empty">아직 추가된 팀이 없습니다.</span>
-              ) : (
-                session.teams.map((team) => (
-                  <div key={team.id} className={`team-summary ${session.currentTeamId === team.id ? 'active' : ''}`}>
-                    <span className="team-dot" style={{ background: team.color || 'var(--accent)' }} />
-                    <span className="team-name">{team.name}</span>
-                    <strong>{formatTime(team.timer.remainingSeconds)}</strong>
-                    <button
-                      className="icon-button"
-                      onClick={() => sendMessage({ type: 'REMOVE_TEAM', payload: { teamId: team.id } })}
-                      title="팀 삭제"
-                      type="button"
-                    >
-                      x
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
           <section className="panel section">
             <div className="section-header">
               <h2>번역 엔진</h2>
@@ -381,7 +257,7 @@ export function OperatorPage() {
             <div className="section-header">
               <h2>세션</h2>
             </div>
-            <p className="meta">주제, 팀, 타이머, 번역 상태를 초기화합니다.</p>
+            <p className="meta">번역 상태를 초기화합니다.</p>
             <button
               className="btn btn-danger"
               onClick={() => {

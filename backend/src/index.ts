@@ -4,14 +4,20 @@
 import express from 'express';
 import http from 'http';
 import dotenv from 'dotenv';
-import { WsHub } from './socket/wsHub';
-import { whisperService } from './services/whisperService';
+import path from 'path';
 
-dotenv.config({ path: '../config/.env' });
+// Resolve from this source file instead of the shell's current directory, and
+// load it before importing services that capture API keys during initialization.
+dotenv.config({ path: path.resolve(__dirname, '../../config/.env') });
 
 const PORT = process.env.PORT || 3001;
 
 async function main() {
+  const [{ WsHub }, { whisperService }] = await Promise.all([
+    import('./socket/wsHub'),
+    import('./services/whisperService'),
+  ]);
+
   const app = express();
   app.use(express.json());
 
@@ -42,7 +48,13 @@ async function main() {
           body: JSON.stringify({
             session: {
               model: 'gpt-realtime-translate',
-              audio: { output: { language: targetLanguage } },
+              audio: {
+                input: {
+                  transcription: { model: 'gpt-realtime-whisper' },
+                  noise_reduction: { type: 'far_field' },
+                },
+                output: { language: targetLanguage },
+              },
             },
           }),
         }

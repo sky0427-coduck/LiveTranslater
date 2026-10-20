@@ -507,10 +507,14 @@ button {
 
 .translated-caption {
   min-height: 1.3em;
-  font-size: clamp(2.2rem, 6.3vw, 5.6rem);
+  font-size: clamp(1.8rem, 5vw, 4.5rem);
   font-weight: 850;
-  line-height: 1.18;
+  line-height: 1.2;
   text-wrap: balance;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .display-footer {

@@ -44,6 +44,7 @@ export type ServerMessage =
   | { type: 'PARTIAL_TRANSCRIPT'; payload: TranscriptPayload }
   | { type: 'TRANSCRIPT_FINAL'; payload: TranscriptPayload }
   | { type: 'TRANSLATION_RESULT'; payload: TranslationResultPayload }
+  | { type: 'REALTIME_TRANSLATION_DELTA'; payload: { original: string; delta: string } }
   | { type: 'TIMER_TICK'; payload: { remaining: number; teamId: string | null } }
   | { type: 'WHISPER_STATUS'; payload: { ready: boolean } }
   | { type: 'ERROR'; payload: { message: string } };
@@ -60,7 +61,7 @@ export type ClientMessage =
   | { type: 'SWITCH_ENGINE'; payload: { engine: TranslationEngine } }
   | { type: 'SET_LANGUAGE'; payload: { sourceLang: string; targetLang: string } }
   | { type: 'REALTIME_TRANSCRIPT'; payload: { text: string } }
-  | { type: 'REALTIME_TRANSLATION'; payload: { original: string; translated: string } }
+  | { type: 'REALTIME_TRANSLATION'; payload: { original: string; delta: string } }
   | { type: 'RESET_SESSION' };
 
 export interface TranscriptPayload {

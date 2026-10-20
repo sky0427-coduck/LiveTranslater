@@ -19,6 +19,8 @@ interface SessionStore {
   // 현재 표시 중인 텍스트 (partial + final)
   currentTranscript: string;
   currentTranslation: string;
+  translationLines: string[];
+  translationPending: string;
 
   // 액션
   setConnected: (v: boolean) => void;
@@ -45,6 +47,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
   whisperReady: false,
   currentTranscript: '',
   currentTranslation: '',
+  translationLines: [],
+  translationPending: '',
 
   setConnected: (v) => set({ isConnected: v }),
 
@@ -70,34 +74,34 @@ export const useSessionStore = create<SessionStore>((set) => ({
         set({
           currentTranslation: msg.payload.translated,
           currentTranscript: msg.payload.original,
+          translationLines: splitSentences(msg.payload.translated).slice(-3),
+          translationPending: '',
         });
         break;
 
-      case 'TIMER_TICK':
-        set((state) => ({
-          session: state.session
-            ? {
-                ...state.session,
-                teams: state.session.teams.map((team) =>
-                  team.id === msg.payload.teamId
-                    ? {
-                        ...team,
-                        timer: {
-                          ...team.timer,
-                          remainingSeconds: msg.payload.remaining,
-                          isRunning: true,
-                        },
-                      }
-                    : team
-                ),
-                timer: {
-                  ...state.session.timer,
-                  remainingSeconds: msg.payload.remaining,
-                  isRunning: true,
-                },
-              }
-            : state.session,
-        }));
+      case 'REALTIME_TRANSLATION_DELTA':
+        set((state) => {
+          const combined = state.translationPending + msg.payload.delta;
+          const sentencePattern = /[^.!?。！？]*[.!?。！？]+["'”’」』)]*(?:\s+|$)/gu;
+          const completed: string[] = [];
+          let match: RegExpExecArray | null;
+          let consumed = 0;
+          while ((match = sentencePattern.exec(combined)) !== null) {
+            const sentence = match[0].trim();
+            if (sentence) completed.push(sentence);
+            consumed = sentencePattern.lastIndex;
+          }
+
+          const pending = combined.slice(consumed).trimStart();
+          const translationLines = [...state.translationLines, ...completed].slice(-3);
+          const visibleLines = [...translationLines, pending].filter(Boolean).slice(-3);
+          return {
+            currentTranscript: msg.payload.original || state.currentTranscript,
+            translationLines,
+            translationPending: pending,
+            currentTranslation: visibleLines.join('\n'),
+          };
+        });
         break;
 
       case 'ERROR':
@@ -106,3 +110,10 @@ export const useSessionStore = create<SessionStore>((set) => ({
     }
   },
 }));
+
+function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?。！？])\s*/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}

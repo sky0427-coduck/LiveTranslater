@@ -47,6 +47,7 @@ function scoreDevice(label: string, deviceId: string): number {
 
 export function useAudioCapture({ onAudioChunk, onStreamStarted }: UseAudioCaptureOptions) {
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('default');
   const [autoSelectedLabel, setAutoSelectedLabel] = useState('');
@@ -58,6 +59,7 @@ export function useAudioCapture({ onAudioChunk, onStreamStarted }: UseAudioCaptu
   const mutedGainRef = useRef<GainNode | null>(null);
   const accum = useRef<Float32Array[]>([]);
   const sendTimer = useRef<number | null>(null);
+  const startingRef = useRef(false);
 
   const refreshDevices = useCallback(async () => {
     if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -104,7 +106,11 @@ export function useAudioCapture({ onAudioChunk, onStreamStarted }: UseAudioCaptu
   }, [refreshDevices]);
 
   const startCapture = useCallback(async () => {
-    if (isCapturing) return;
+    // getUserMedia and the Realtime handshake are asynchronous. Lock before
+    // awaiting either so a fast/double click cannot create two live streams.
+    if (isCapturing || startingRef.current) return;
+    startingRef.current = true;
+    setIsStarting(true);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -169,7 +175,12 @@ export function useAudioCapture({ onAudioChunk, onStreamStarted }: UseAudioCaptu
       console.log('[audio] capture started:', stream.getAudioTracks()[0]?.label);
     } catch (err) {
       console.error('[audio] capture failed:', err);
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
       alert(`마이크 접근에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      startingRef.current = false;
+      setIsStarting(false);
     }
   }, [isCapturing, selectedDeviceId, onAudioChunk, onStreamStarted]);
 
@@ -194,6 +205,7 @@ export function useAudioCapture({ onAudioChunk, onStreamStarted }: UseAudioCaptu
 
   return {
     isCapturing,
+    isStarting,
     devices,
     selectedDeviceId,
     setSelectedDeviceId,

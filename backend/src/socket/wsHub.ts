@@ -281,21 +281,10 @@ export class WsHub {
         });
         break;
       case 'REALTIME_TRANSLATION':
-        {
-          const id = uuidv4();
-          const translation = {
-            id,
-            original: msg.payload.original,
-            translated: msg.payload.translated,
-            sourceLang: this.session.sourceLang,
-            targetLang: this.session.targetLang,
-            teamId: this.session.currentTeamId ?? undefined,
-            timestamp: Date.now(),
-          };
-          this.session.translations.push(translation);
-          if (this.session.translations.length > 50) this.session.translations.shift();
-          this.broadcast({ type: 'TRANSLATION_RESULT', payload: translation });
-        }
+        this.broadcast({
+          type: 'REALTIME_TRANSLATION_DELTA',
+          payload: { original: msg.payload.original, delta: msg.payload.delta },
+        });
         break;
       case 'RESET_SESSION':
         this.pauseTimer(false);
