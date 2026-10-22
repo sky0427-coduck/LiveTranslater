@@ -21,9 +21,12 @@ interface SessionStore {
   currentTranslation: string;
   translationLines: string[];
   translationPending: string;
+  translationDisplayPending: string;
+  lastTranslationUpdateAt: number;
 
   // 액션
   setConnected: (v: boolean) => void;
+  clearDisplayedTranslationText: () => void;
   applyServerMessage: (msg: ServerMessage) => void;
 }
 
@@ -49,8 +52,15 @@ export const useSessionStore = create<SessionStore>((set) => ({
   currentTranslation: '',
   translationLines: [],
   translationPending: '',
+  translationDisplayPending: '',
+  lastTranslationUpdateAt: 0,
 
   setConnected: (v) => set({ isConnected: v }),
+  clearDisplayedTranslationText: () => set({
+    currentTranslation: '',
+    translationLines: [],
+    translationDisplayPending: '',
+  }),
 
   applyServerMessage: (msg) => {
     switch (msg.type) {
@@ -74,15 +84,17 @@ export const useSessionStore = create<SessionStore>((set) => ({
         set({
           currentTranslation: msg.payload.translated,
           currentTranscript: msg.payload.original,
-          translationLines: splitSentences(msg.payload.translated).slice(-3),
+          translationLines: splitSentences(msg.payload.translated),
           translationPending: '',
+          translationDisplayPending: '',
+          lastTranslationUpdateAt: Date.now(),
         });
         break;
 
       case 'REALTIME_TRANSLATION_DELTA':
         set((state) => {
           const combined = state.translationPending + msg.payload.delta;
-          const sentencePattern = /[^.!?。！？]*[.!?。！？]+["'”’」』)]*(?:\s+|$)/gu;
+          const sentencePattern = /[^.!?。！？]*[.!?。！？]+["'”’」』)]*/gu;
           const completed: string[] = [];
           let match: RegExpExecArray | null;
           let consumed = 0;
@@ -93,13 +105,17 @@ export const useSessionStore = create<SessionStore>((set) => ({
           }
 
           const pending = combined.slice(consumed).trimStart();
-          const translationLines = [...state.translationLines, ...completed].slice(-3);
-          const visibleLines = [...translationLines, pending].filter(Boolean).slice(-3);
+          const translationLines = [...state.translationLines, ...completed];
+          const visibleLines = [...translationLines, pending].filter(Boolean);
           return {
             currentTranscript: msg.payload.original || state.currentTranscript,
             translationLines,
             translationPending: pending,
+            translationDisplayPending: pending,
             currentTranslation: visibleLines.join('\n'),
+            lastTranslationUpdateAt: msg.payload.delta
+              ? Date.now()
+              : state.lastTranslationUpdateAt,
           };
         });
         break;

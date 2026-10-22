@@ -52,7 +52,6 @@ export function OperatorPage() {
     },
     [sendBinary, session?.translationEngine]
   );
-
   const realtime = useRealtimeTranslation({
     targetLanguage: session?.targetLang ?? 'ko',
     onSourceTranscript: useCallback(

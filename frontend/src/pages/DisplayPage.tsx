@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useSessionStore } from '../store/sessionStore';
 import { useTheme } from '../theme';
@@ -6,35 +7,37 @@ export function DisplayPage() {
   useWebSocket('display');
 
   const { theme, toggleTheme } = useTheme();
-  const { session, currentTranscript, translationLines, translationPending } = useSessionStore();
+  const {
+    session,
+    translationLines,
+    translationDisplayPending,
+    lastTranslationUpdateAt,
+    clearDisplayedTranslationText,
+  } = useSessionStore();
+  const displayLines = [...translationLines, translationDisplayPending].filter(Boolean);
+  const displayText = displayLines.join('\n');
+
+  useEffect(() => {
+    if (!displayText || !lastTranslationUpdateAt) return;
+
+    const remainingMs = Math.max(0, lastTranslationUpdateAt + 1500 - Date.now());
+    const timeout = window.setTimeout(clearDisplayedTranslationText, remainingMs);
+    return () => window.clearTimeout(timeout);
+  }, [displayText, lastTranslationUpdateAt, clearDisplayedTranslationText]);
 
   if (!session) return null;
 
   return (
     <main className="display-page">
-      <header className="display-header">
-        <div className="display-title">
-          <h1>Live Translator</h1>
-        </div>
-      </header>
-
       <section className="display-main" aria-live="polite">
         <div className="caption-stack">
-          <div className="original-caption">
-            {currentTranscript || <span className="empty">원문 음성을 기다리는 중입니다.</span>}
-          </div>
           <div className="translated-caption">
-            {translationLines.length || translationPending ? (
-              [...translationLines, translationPending].filter(Boolean).slice(-3).map((line, i) => (
-                <div key={`${i}-${line}`}>{line}</div>
-              ))
-            ) : (
-              currentTranscript ? '번역 중...' : ''
-            )}
+            {displayLines.length ? (
+              displayLines.map((line, i) => <div key={`${i}-${line}`}>{line}</div>)
+            ) : null}
           </div>
         </div>
       </section>
-
       <footer className="display-footer">
         <span>{session.translationEngine === 'deepl' ? 'DeepL' : 'OpenAI Realtime'} 번역</span>
         <button className="btn btn-ghost" onClick={toggleTheme} type="button">

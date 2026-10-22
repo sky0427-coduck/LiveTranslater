@@ -511,10 +511,8 @@ button {
   font-weight: 850;
   line-height: 1.2;
   text-wrap: balance;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: block;
+  overflow: visible;
 }
 
 .display-footer {
