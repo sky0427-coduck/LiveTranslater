@@ -80,6 +80,31 @@ async function main() {
   const server = http.createServer(app);
   const wsHub = new WsHub(server);
 
+  app.get('/api/display/text', (_req, res) => {
+    res.set({
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store',
+    }).send(wsHub.getDisplayText());
+  });
+
+  app.get('/api/display/stream', (req, res) => {
+    res.status(200);
+    res.set({
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+
+    const sendText = (text: string) => {
+      res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    };
+    sendText(wsHub.getDisplayText());
+    const unsubscribe = wsHub.onDisplayText(sendText);
+    res.on('close', unsubscribe);
+  });
+
   // Realtime Translation is the default. Whisper is only needed for the
   // optional DeepL fallback path.
   if (process.env.USE_WHISPER === 'true') {

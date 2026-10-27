@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useSessionStore } from '../store/sessionStore';
 import { useTheme } from '../theme';
@@ -9,21 +8,9 @@ export function DisplayPage() {
   const { theme, toggleTheme } = useTheme();
   const {
     session,
-    translationLines,
-    translationDisplayPending,
-    lastTranslationUpdateAt,
-    clearDisplayedTranslationText,
+    displayText,
   } = useSessionStore();
-  const displayLines = [...translationLines, translationDisplayPending].filter(Boolean);
-  const displayText = displayLines.join('\n');
-
-  useEffect(() => {
-    if (!displayText || !lastTranslationUpdateAt) return;
-
-    const remainingMs = Math.max(0, lastTranslationUpdateAt + 1500 - Date.now());
-    const timeout = window.setTimeout(clearDisplayedTranslationText, remainingMs);
-    return () => window.clearTimeout(timeout);
-  }, [displayText, lastTranslationUpdateAt, clearDisplayedTranslationText]);
+  const displayLines = displayText ? displayText.split('\n') : [];
 
   if (!session) return null;
 

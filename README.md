@@ -55,8 +55,25 @@ bash start.sh
 |---|---|
 | `http://localhost:5173/operator` | 운영자 화면 — 오디오 장치 선택 및 캡처 시작 |
 | `http://localhost:5173/display` | 청중용 한국어 자막 화면 |
+| `http://localhost:5173/overlay` | OBS용 투명 자막만 표시하는 브라우저 소스 |
 
 종료하려면 `start.sh`를 실행한 터미널에서 `Ctrl+C`를 누릅니다.
+
+### OBS 자막 사용
+
+OBS에서 **브라우저 소스**를 추가하고 `http://localhost:5173/overlay`를 URL로 입력합니다.
+브라우저 소스의 너비·높이를 원하는 자막 영역에 맞추고, OBS 변환으로 화면 아래 원하는 위치에 배치하세요.
+페이지에는 투명 배경과 자막 텍스트만 표시하며 `/display`의 문장 청킹 및 1.5초 후 지우기 동작을 공유합니다.
+
+자막 옵션은 URL 쿼리로 지정할 수 있습니다. 예: `/overlay?fontSize=48&align=center&color=%23ffffff`.
+`fontSize`는 16–96px, `align`은 `left`, `center`, `right`를 지원합니다.
+
+텍스트 API도 제공합니다.
+
+- `GET /api/display/text`: 현재 표시 중인 텍스트를 `text/plain`으로 반환
+- `GET /api/display/stream`: 텍스트 변경을 SSE로 실시간 전달 (`data: {"text":"..."}`)
+
+OBS의 일반 텍스트 소스는 SSE URL을 직접 표시하지 않으므로, 자막을 실시간으로 띄울 때는 위 브라우저 소스 주소를 사용합니다.
 
 ## 실제 작동 순서
 

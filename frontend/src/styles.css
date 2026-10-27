@@ -59,6 +59,34 @@ body {
     var(--bg);
 }
 
+body.obs-overlay-active {
+  background: transparent;
+}
+
+body.obs-overlay-active #root {
+  min-height: 100vh;
+}
+
+.obs-overlay {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 3vw 2vh;
+  overflow: hidden;
+  font-weight: 850;
+  line-height: 1.2;
+  text-align: center;
+  text-shadow: 0 2px 4px #000, 0 0 10px #000;
+  pointer-events: none;
+}
+
+.obs-overlay-line {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 button,
 input,
 select {

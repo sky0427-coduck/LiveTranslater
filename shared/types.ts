@@ -45,6 +45,7 @@ export type ServerMessage =
   | { type: 'TRANSCRIPT_FINAL'; payload: TranscriptPayload }
   | { type: 'TRANSLATION_RESULT'; payload: TranslationResultPayload }
   | { type: 'REALTIME_TRANSLATION_DELTA'; payload: { original: string; delta: string } }
+  | { type: 'DISPLAY_TEXT_UPDATE'; payload: { text: string } }
   | { type: 'TIMER_TICK'; payload: { remaining: number; teamId: string | null } }
   | { type: 'WHISPER_STATUS'; payload: { ready: boolean } }
   | { type: 'ERROR'; payload: { message: string } };

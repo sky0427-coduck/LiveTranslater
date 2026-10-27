@@ -16,7 +16,9 @@ const VAD_RMS_THRESHOLD = 0.01;
 const CHUNK_SECONDS     = 2;
 const SAMPLE_RATE       = 44100;
 const DEFAULT_TIMER_SECONDS = 300;
+const DISPLAY_TEXT_CLEAR_DELAY_MS = 1500;
 const TEAM_COLORS = ['#2563eb', '#14b8a6', '#f97316', '#a855f7', '#ef4444', '#16a34a'];
+type DisplayTextListener = (text: string) => void;
 
 class AudioBuffer {
   private chunks: Float32Array[] = [];
@@ -77,11 +79,69 @@ export class WsHub {
   private audioBuffer = new AudioBuffer();
   private timerInterval: NodeJS.Timeout | null = null;
   private lastTranscript = '';
+  private displayText = '';
+  private displayTranslationLines: string[] = [];
+  private displayTranslationPending = '';
+  private displayTextClearTimeout: NodeJS.Timeout | null = null;
+  private displayTextListeners = new Set<DisplayTextListener>();
 
   constructor(server: http.Server) {
     this.wss = new WebSocketServer({ server });
     this.wss.on('connection', this.onConnection.bind(this));
     console.log('[wsHub] WebSocket 서버 준비');
+  }
+
+  getDisplayText(): string {
+    return this.displayText;
+  }
+
+  onDisplayText(listener: DisplayTextListener): () => void {
+    this.displayTextListeners.add(listener);
+    return () => this.displayTextListeners.delete(listener);
+  }
+
+  private setDisplayText(text: string): void {
+    this.displayText = text;
+    this.broadcast({ type: 'DISPLAY_TEXT_UPDATE', payload: { text } });
+    for (const listener of this.displayTextListeners) listener(text);
+  }
+
+  private scheduleDisplayTextClear(): void {
+    if (this.displayTextClearTimeout) clearTimeout(this.displayTextClearTimeout);
+    this.displayTextClearTimeout = setTimeout(() => {
+      this.displayTextClearTimeout = null;
+      this.displayTranslationLines = [];
+      this.displayTranslationPending = '';
+      this.setDisplayText('');
+    }, DISPLAY_TEXT_CLEAR_DELAY_MS);
+  }
+
+  private updateDisplayTextFromDelta(delta: string): void {
+    const combined = this.displayTranslationPending + delta;
+    const sentencePattern = /[^.!?。！？]*[.!?。！？]+["'”’」』)]*/gu;
+    let match: RegExpExecArray | null;
+    let consumed = 0;
+    while ((match = sentencePattern.exec(combined)) !== null) {
+      const sentence = match[0].trim();
+      if (sentence) this.displayTranslationLines.push(sentence);
+      consumed = sentencePattern.lastIndex;
+    }
+
+    this.displayTranslationPending = combined.slice(consumed).trimStart();
+    this.setDisplayText(
+      [...this.displayTranslationLines, this.displayTranslationPending].filter(Boolean).join('\n')
+    );
+    if (delta) this.scheduleDisplayTextClear();
+  }
+
+  private updateDisplayTextFromTranslation(text: string): void {
+    this.displayTranslationLines = text
+      .split(/(?<=[.!?。！？])\s*/u)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean);
+    this.displayTranslationPending = '';
+    this.setDisplayText(this.displayTranslationLines.join('\n'));
+    this.scheduleDisplayTextClear();
   }
 
   private onConnection(ws: WebSocket, req: http.IncomingMessage): void {
@@ -91,6 +151,7 @@ export class WsHub {
     this.clients.set(ws, client);
     console.log(`[wsHub] 연결: ${role} (총 ${this.clients.size}명)`);
     this.send(ws, { type: 'SESSION_UPDATE', payload: this.session });
+    this.send(ws, { type: 'DISPLAY_TEXT_UPDATE', payload: { text: this.displayText } });
     this.send(ws, { type: 'WHISPER_STATUS', payload: { ready: whisperService.isReady() } });
     ws.on('message', (data, isBinary) => this.onMessage(ws, client, data, isBinary));
     ws.on('close', () => {
@@ -193,6 +254,7 @@ export class WsHub {
       });
 
       if (translated) {
+        this.updateDisplayTextFromTranslation(translated);
         this.broadcast({
           type: 'TRANSLATION_RESULT',
           payload: {
@@ -281,6 +343,7 @@ export class WsHub {
         });
         break;
       case 'REALTIME_TRANSLATION':
+        this.updateDisplayTextFromDelta(msg.payload.delta);
         this.broadcast({
           type: 'REALTIME_TRANSLATION_DELTA',
           payload: { original: msg.payload.original, delta: msg.payload.delta },
@@ -291,6 +354,11 @@ export class WsHub {
         this.session = createDefaultSession();
         this.audioBuffer.clear();
         this.lastTranscript = '';
+        if (this.displayTextClearTimeout) clearTimeout(this.displayTextClearTimeout);
+        this.displayTextClearTimeout = null;
+        this.displayTranslationLines = [];
+        this.displayTranslationPending = '';
+        this.setDisplayText('');
         this.broadcast({ type: 'SESSION_UPDATE', payload: this.session });
         break;
     }

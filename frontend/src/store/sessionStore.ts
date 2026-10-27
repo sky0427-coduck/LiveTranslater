@@ -19,14 +19,10 @@ interface SessionStore {
   // 현재 표시 중인 텍스트 (partial + final)
   currentTranscript: string;
   currentTranslation: string;
-  translationLines: string[];
-  translationPending: string;
-  translationDisplayPending: string;
-  lastTranslationUpdateAt: number;
+  displayText: string;
 
   // 액션
   setConnected: (v: boolean) => void;
-  clearDisplayedTranslationText: () => void;
   applyServerMessage: (msg: ServerMessage) => void;
 }
 
@@ -50,17 +46,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
   whisperReady: false,
   currentTranscript: '',
   currentTranslation: '',
-  translationLines: [],
-  translationPending: '',
-  translationDisplayPending: '',
-  lastTranslationUpdateAt: 0,
+  displayText: '',
 
   setConnected: (v) => set({ isConnected: v }),
-  clearDisplayedTranslationText: () => set({
-    currentTranslation: '',
-    translationLines: [],
-    translationDisplayPending: '',
-  }),
 
   applyServerMessage: (msg) => {
     switch (msg.type) {
@@ -84,40 +72,18 @@ export const useSessionStore = create<SessionStore>((set) => ({
         set({
           currentTranslation: msg.payload.translated,
           currentTranscript: msg.payload.original,
-          translationLines: splitSentences(msg.payload.translated),
-          translationPending: '',
-          translationDisplayPending: '',
-          lastTranslationUpdateAt: Date.now(),
         });
         break;
 
       case 'REALTIME_TRANSLATION_DELTA':
-        set((state) => {
-          const combined = state.translationPending + msg.payload.delta;
-          const sentencePattern = /[^.!?。！？]*[.!?。！？]+["'”’」』)]*/gu;
-          const completed: string[] = [];
-          let match: RegExpExecArray | null;
-          let consumed = 0;
-          while ((match = sentencePattern.exec(combined)) !== null) {
-            const sentence = match[0].trim();
-            if (sentence) completed.push(sentence);
-            consumed = sentencePattern.lastIndex;
-          }
+        set((state) => ({
+          currentTranscript: msg.payload.original || state.currentTranscript,
+          currentTranslation: state.displayText,
+        }));
+        break;
 
-          const pending = combined.slice(consumed).trimStart();
-          const translationLines = [...state.translationLines, ...completed];
-          const visibleLines = [...translationLines, pending].filter(Boolean);
-          return {
-            currentTranscript: msg.payload.original || state.currentTranscript,
-            translationLines,
-            translationPending: pending,
-            translationDisplayPending: pending,
-            currentTranslation: visibleLines.join('\n'),
-            lastTranslationUpdateAt: msg.payload.delta
-              ? Date.now()
-              : state.lastTranslationUpdateAt,
-          };
-        });
+      case 'DISPLAY_TEXT_UPDATE':
+        set({ displayText: msg.payload.text, currentTranslation: msg.payload.text });
         break;
 
       case 'ERROR':
@@ -126,10 +92,3 @@ export const useSessionStore = create<SessionStore>((set) => ({
     }
   },
 }));
-
-function splitSentences(text: string): string[] {
-  return text
-    .split(/(?<=[.!?。！？])\s*/u)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean);
-}
